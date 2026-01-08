@@ -1,12 +1,10 @@
 # iiSU Asset Tool
 
-Create custom icons, borders, and covers for your game library with the official iiSU Asset Tool.
-
-![iiSU Theme](docs/theme-preview.png)
+Create custom icons, borders, and covers for your game library with the iiSU Asset Tool.
 
 ## Quick Start
 
-> **Note:** Pre-built executables for Windows and macOS are available in the [Releases](https://github.com/yourusername/iisu-asset-tool/releases) section. If you want to run from source or build your own executable, follow the instructions below.
+> **Note:** Pre-built executables for Windows and macOS are available in the [Releases](https://github.com/viik-4/iisu-asset-tool/releases) section. If you want to run from source or build your own executable, follow the instructions below.
 
 ### 1. Install Dependencies
 
