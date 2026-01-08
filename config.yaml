@@ -1,0 +1,370 @@
+output_size: 1024
+export_format: PNG
+steamgriddb:
+  api_key_env: SGDB_API_KEY
+  base_url: https://www.steamgriddb.com/api/v2
+  request_timeout_seconds: 40
+  delay_seconds: 0.25
+  allow_animated: false
+  prefer_dimensions:
+  - 1024x1024
+  square_styles:
+  - alternate
+  - material
+  - white_logo
+  - blurred
+  - no_logo
+paths:
+  borders_dir: ./borders
+  platform_icons_dir: ./platform_icons
+  output_dir: ./output
+  review_dir: ./review
+  cache_dir: ./data/cache
+  dataset_cache_dir: ./data/dataset_cache
+dataset:
+  source: github_zip
+  repo_zip_url: https://github.com/Elbriga14/EveryVideoGameEver/archive/refs/heads/main.zip
+  gamesdb_subdir: EveryVideoGameEver-main/GamesDB
+  per_platform_limit: 0
+platforms:
+  NES:
+    border_file: NES.png
+    icon_file: NES.png
+    publisher: Nintendo
+    year: 1983
+    type: console
+  SNES:
+    border_file: SNES.png
+    icon_file: SNES.png
+    publisher: Nintendo
+    year: 1990
+    type: console
+  N64:
+    border_file: N64.png
+    icon_file: N64.png
+    publisher: Nintendo
+    year: 1996
+    type: console
+  GAMECUBE:
+    border_file: Gamecube.png
+    icon_file: GAMECUBE.png
+    publisher: Nintendo
+    year: 2001
+    type: console
+  WII:
+    border_file: Wii.png
+    publisher: Nintendo
+    year: 2006
+    type: console
+  WII_U:
+    border_file: Wii_U.png
+    publisher: Nintendo
+    year: 2012
+    type: console
+  SWITCH:
+    border_file: Switch.png
+    publisher: Nintendo
+    year: 2017
+    type: hybrid
+  GAME_BOY:
+    border_file: Game_Boy.png
+    publisher: Nintendo
+    year: 1989
+    type: handheld
+  GAME_BOY_COLOR:
+    border_file: Game_Boy_Color.png
+    publisher: Nintendo
+    year: 1998
+    type: handheld
+  GAME_BOY_ADVANCE:
+    border_file: Game_Boy_Advance.png
+    publisher: Nintendo
+    year: 2001
+    type: handheld
+  NINTENDO_DS:
+    border_file: NINTENDO_DS.png
+    publisher: Nintendo
+    year: 2004
+    type: handheld
+  NINTENDO_3DS:
+    border_file: NINTENDO_3DS.png
+    publisher: Nintendo
+    year: 2011
+    type: handheld
+  PS1:
+    border_file: PSX.png
+    icon_file: PSX.png
+    publisher: Sony
+    year: 1994
+    type: console
+  PS2:
+    border_file: PS2.png
+    publisher: Sony
+    year: 2000
+    type: console
+  PS3:
+    border_file: PS3.png
+    publisher: Sony
+    year: 2006
+    type: console
+  PS4:
+    border_file: PS4.png
+    publisher: Sony
+    year: 2013
+    type: console
+  PS5:
+    border_file: PS5.png
+    publisher: Sony
+    year: 2020
+    type: console
+  PSP:
+    border_file: PSP.png
+    publisher: Sony
+    year: 2004
+    type: handheld
+    wikipedia_url: https://en.wikipedia.org/wiki/List_of_PlayStation_Portable_games
+  PS_VITA:
+    border_file: PS_Vita.png
+    publisher: Sony
+    year: 2011
+    type: handheld
+    wikipedia_url: https://en.wikipedia.org/wiki/List_of_PlayStation_Vita_games_(A–D)
+  XBOX:
+    border_file: Xbox.png
+    publisher: Microsoft
+    year: 2001
+    type: console
+  XBOX_360:
+    border_file: XBOX_360.png
+    publisher: Microsoft
+    year: 2005
+    type: console
+  MASTER_SYSTEM:
+    border_file: MASTER_SYSTEM.png
+    publisher: Sega
+    year: 1985
+    type: console
+  GENESIS:
+    border_file: GENESIS.png
+    publisher: Sega
+    year: 1988
+    type: console
+  SEGA_CD:
+    border_file: SEGA_CD.png
+    publisher: Sega
+    year: 1991
+    type: console
+  SEGA_32X:
+    border_file: SEGA_32X.png
+    publisher: Sega
+    year: 1994
+    type: console
+  SATURN:
+    border_file: Saturn.png
+    publisher: Sega
+    year: 1994
+    type: console
+  DREAMCAST:
+    border_file: Dreamcast.png
+    publisher: Sega
+    year: 1998
+    type: console
+  GAME_GEAR:
+    border_file: Game_Gear.png
+    publisher: Sega
+    year: 1990
+    type: handheld
+  ANDROID:
+    border_file: Android.png
+    publisher: Google
+    year: 2008
+    type: mobile
+platform_aliases:
+  NES:
+  - NESGames
+  SNES:
+  - SNESGames
+  N64:
+  - N64Games
+  GAMECUBE:
+  - GAMECUBEGames
+  WII:
+  - WIIGames
+  WII_U:
+  - WII_UGames
+  SWITCH:
+  - SWITCHGames
+  GAME_BOY:
+  - GBGames
+  GAME_BOY_COLOR:
+  - GBCGames
+  GAME_BOY_ADVANCE:
+  - GBAGames
+  NINTENDO_DS:
+  - DSGames
+  NINTENDO_3DS:
+  - 3DSGames
+  PS1:
+  - PS1Games
+  PS2:
+  - PS2Games
+  PS3:
+  - PS3Games
+  PS4:
+  - PS4Games
+  PSP:
+  - PSPGames
+  PS_VITA:
+  - PS_VITAGames
+  XBOX:
+  - XBOXGames
+  XBOX_360:
+  - XBOX_360Games
+  MASTER_SYSTEM:
+  - MASTER_SYSTEMGames
+  GENESIS:
+  - GENESISGames
+  SEGA_CD:
+  - SEGA_CDGames
+  SEGA_32X:
+  - SEGA32XGames
+  SATURN:
+  - SATURNGames
+  DREAMCAST:
+  - DREAMCASTGames
+  GAME_GEAR:
+  - GAMEGEARGames
+  ANDROID:
+  - ANDROID
+libretro:
+  base_url: https://thumbnails.libretro.com
+  type_dir: Named_Boxarts
+  playlist_names:
+    NES: Nintendo - Nintendo Entertainment System
+    SNES: Nintendo - Super Nintendo Entertainment System
+    N64: Nintendo - Nintendo 64
+    GAMECUBE: Nintendo - GameCube
+    WII: Nintendo - Wii
+    WII_U: Nintendo - Wii U
+    SWITCH: Nintendo - Nintendo Switch
+    GAME_BOY: Nintendo - Game Boy
+    GAME_BOY_COLOR: Nintendo - Game Boy Color
+    GAME_BOY_ADVANCE: Nintendo - Game Boy Advance
+    NINTENDO_DS: Nintendo - Nintendo DS
+    NINTENDO_3DS: Nintendo - Nintendo 3DS
+    PS1: Sony - PlayStation
+    PS2: Sony - PlayStation 2
+    PS3: Sony - PlayStation 3
+    PSP: Sony - PlayStation Portable
+    PS_VITA: Sony - PlayStation Vita
+    XBOX: Microsoft - Xbox
+    XBOX_360: Microsoft - Xbox 360
+    MASTER_SYSTEM: Sega - Master System - Mark III
+    GENESIS: Sega - Mega Drive - Genesis
+    SEGA_CD: Sega - Mega-CD - Sega CD
+    SEGA_32X: Sega - 32X
+    SATURN: Sega - Saturn
+    DREAMCAST: Sega - Dreamcast
+    GAME_GEAR: Sega - Game Gear
+igdb:
+  client_id_env: IGDB_CLIENT_ID
+  client_secret_env: IGDB_CLIENT_SECRET
+  base_url: https://api.igdb.com/v4
+  request_timeout_seconds: 30
+  delay_seconds: 0.25
+  cover_size: cover_big
+  prefer_image_type: cover
+  platform_map:
+    NES: 18
+    SNES: 19
+    N64: 4
+    GAMECUBE: 21
+    WII: 5
+    WII_U: 41
+    SWITCH: 130
+    GAME_BOY: 33
+    GAME_BOY_COLOR: 22
+    GAME_BOY_ADVANCE: 24
+    NINTENDO_DS: 20
+    NINTENDO_3DS: 37
+    PS1: 7
+    PS2: 8
+    PS3: 9
+    PS4: 48
+    PS5: 167
+    PSP: 38
+    PS_VITA: 46
+    XBOX: 11
+    XBOX_360: 12
+    MASTER_SYSTEM: 64
+    GENESIS: 29
+    SEGA_CD: 78
+    SEGA_32X: 30
+    SATURN: 32
+    DREAMCAST: 23
+    GAME_GEAR: 35
+thegamesdb:
+  api_key_env: TGDB_API_KEY
+  base_url: https://api.thegamesdb.net/v1
+  request_timeout_seconds: 30
+  delay_seconds: 0.5
+  prefer_image_type: boxart
+  platform_map:
+    NES: 7
+    SNES: 6
+    N64: 3
+    GAMECUBE: 2
+    WII: 9
+    WII_U: 38
+    SWITCH: 4971
+    GAME_BOY: 4912
+    GAME_BOY_COLOR: 41
+    GAME_BOY_ADVANCE: 12
+    NINTENDO_DS: 8
+    NINTENDO_3DS: 4912
+    PS1: 10
+    PS2: 11
+    PS3: 12
+    PS4: 15
+    PS5: 4919
+    PSP: 13
+    PS_VITA: 39
+    XBOX: 14
+    XBOX_360: 15
+    MASTER_SYSTEM: 35
+    GENESIS: 18
+    SEGA_CD: 21
+    SEGA_32X: 33
+    SATURN: 17
+    DREAMCAST: 16
+    GAME_GEAR: 20
+art_sources:
+  mode: steamgriddb_then_libretro
+  steamgriddb_square_only: true
+  libretro_crop_mode: center_crop
+  providers:
+  - id: steamgriddb
+    enabled: true
+  - id: igdb
+    enabled: true
+  - id: libretro
+    enabled: true
+  - id: thegamesdb
+    enabled: true
+auto_centering:
+  enabled: true
+  sources:
+  - libretro_boxart
+  tolerance: 0.06
+  search_steps: 5
+  search_span: 0.22
+  alpha_threshold: 16
+  margin_pct: 0.06
+logo_detection:
+  enabled: true
+  method: auto
+  sources:
+  - libretro_boxart
+  - steamgriddb_square
+  min_content_ratio: 0.15
+  max_crop_ratio: 0.85
