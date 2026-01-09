@@ -1864,7 +1864,9 @@ def run_job(
         ensure_dir(rev_plat)
 
         for title in titles:
-            out_path = out_plat / f"{safe_slug(title)}.{export_format.lower()}"
+            # Create folder per game with icon.png and title.png
+            game_folder = out_plat / safe_slug(title)
+            out_path = game_folder / f"icon.{export_format.lower()}"
             if out_path.exists():
                 continue
             tasks.append((platform_key, title, border_path, out_path, rev_plat))
@@ -2238,12 +2240,18 @@ def run_job(
                     _emit_log(callbacks, f"[ALIGN] Off-center: {platform_key}: {title} centroid=({mx:.3f},{my:.3f})")
 
             out_img = compose_with_border(src_img, border_path, out_size, centering=centering)
+            # Ensure game folder exists
+            ensure_dir(out_path.parent)
+            # Save as icon.png
             out_img.save(out_path, export_format, optimize=True)
+            # Save duplicate as title.png
+            title_path = out_path.parent / f"title.{export_format.lower()}"
+            out_img.save(title_path, export_format, optimize=True)
             _emit_preview(callbacks, out_path)
             if source_tag:
-                _emit_log(callbacks, f"[OK] {platform_key}: {title} ({source_tag}) -> {out_path.name}")
+                _emit_log(callbacks, f"[OK] {platform_key}: {title} ({source_tag}) -> {out_path.parent.name}/")
             else:
-                _emit_log(callbacks, f"[OK] {platform_key}: {title} -> {out_path.name}")
+                _emit_log(callbacks, f"[OK] {platform_key}: {title} -> {out_path.parent.name}/")
             return True
         except Exception as e:
             _emit_log(callbacks, f"[ERROR] {platform_key}: {title} - Compose error: {e}")
