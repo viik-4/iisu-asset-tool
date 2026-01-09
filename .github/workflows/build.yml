@@ -40,6 +40,8 @@ jobs:
         Copy-Item -Recurse templates releases\windows\iiSU_Asset_Tool\
         Copy-Item -Recurse src releases\windows\iiSU_Asset_Tool\
         Copy-Item config.yaml releases\windows\iiSU_Asset_Tool\
+        Copy-Item logo.png releases\windows\iiSU_Asset_Tool\
+        Copy-Item iisu_theme.qss releases\windows\iiSU_Asset_Tool\
         "iiSU Asset Tool - Windows" | Out-File releases\windows\iiSU_Asset_Tool\README.txt
         Compress-Archive -Path releases\windows\iiSU_Asset_Tool -DestinationPath releases\windows\iiSU_Asset_Tool_Windows.zip
 
@@ -71,25 +73,67 @@ jobs:
       run: |
         pyinstaller build_macos.spec
 
-    - name: Package macOS release
+    - name: Create app icon (icns)
       run: |
-        mkdir -p releases/macos/iiSU_Asset_Tool
-        cp -R "dist/iiSU Asset Tool.app" releases/macos/iiSU_Asset_Tool/
-        cp -R borders releases/macos/iiSU_Asset_Tool/
-        cp -R fonts releases/macos/iiSU_Asset_Tool/
-        cp -R platform_icons releases/macos/iiSU_Asset_Tool/
-        cp -R templates releases/macos/iiSU_Asset_Tool/
-        cp -R src releases/macos/iiSU_Asset_Tool/
-        cp config.yaml releases/macos/iiSU_Asset_Tool/
-        echo "iiSU Asset Tool - macOS" > releases/macos/iiSU_Asset_Tool/README.txt
-        cd releases/macos
-        zip -r iiSU_Asset_Tool_macOS.zip iiSU_Asset_Tool
+        # Create iconset directory
+        mkdir -p icon.iconset
+        # Create different icon sizes from logo.png
+        sips -z 16 16     logo.png --out icon.iconset/icon_16x16.png
+        sips -z 32 32     logo.png --out icon.iconset/icon_16x16@2x.png
+        sips -z 32 32     logo.png --out icon.iconset/icon_32x32.png
+        sips -z 64 64     logo.png --out icon.iconset/icon_32x32@2x.png
+        sips -z 128 128   logo.png --out icon.iconset/icon_128x128.png
+        sips -z 256 256   logo.png --out icon.iconset/icon_128x128@2x.png
+        sips -z 256 256   logo.png --out icon.iconset/icon_256x256.png
+        sips -z 512 512   logo.png --out icon.iconset/icon_256x256@2x.png
+        sips -z 512 512   logo.png --out icon.iconset/icon_512x512.png
+        sips -z 1024 1024 logo.png --out icon.iconset/icon_512x512@2x.png
+        # Convert to icns
+        iconutil -c icns icon.iconset -o app_icon.icns
+
+    - name: Create DMG
+      run: |
+        # Create releases directory
+        mkdir -p releases
+
+        # Create a temporary directory for DMG contents
+        mkdir -p dmg_contents
+
+        # Copy the app bundle
+        cp -R "dist/iiSU Asset Tool.app" dmg_contents/
+
+        # Set the app icon
+        cp app_icon.icns "dmg_contents/iiSU Asset Tool.app/Contents/Resources/app_icon.icns"
+
+        # Update Info.plist to use the icon
+        /usr/libexec/PlistBuddy -c "Add :CFBundleIconFile string app_icon" "dmg_contents/iiSU Asset Tool.app/Contents/Info.plist" 2>/dev/null || \
+        /usr/libexec/PlistBuddy -c "Set :CFBundleIconFile app_icon" "dmg_contents/iiSU Asset Tool.app/Contents/Info.plist"
+
+        # Copy additional resources to the app's Resources folder
+        APP_RESOURCES="dmg_contents/iiSU Asset Tool.app/Contents/Resources"
+        cp -R borders "$APP_RESOURCES/"
+        cp -R fonts "$APP_RESOURCES/"
+        cp -R platform_icons "$APP_RESOURCES/"
+        cp -R templates "$APP_RESOURCES/"
+        cp -R src "$APP_RESOURCES/"
+        cp config.yaml "$APP_RESOURCES/"
+        cp logo.png "$APP_RESOURCES/"
+        cp iisu_theme.qss "$APP_RESOURCES/"
+
+        # Create Applications symlink for drag-and-drop install
+        ln -s /Applications dmg_contents/Applications
+
+        # Create the DMG
+        hdiutil create -volname "iiSU Asset Tool" \
+          -srcfolder dmg_contents \
+          -ov -format UDZO \
+          "releases/iiSU_Asset_Tool_macOS.dmg"
 
     - name: Upload macOS artifact
       uses: actions/upload-artifact@v4
       with:
         name: macos-build
-        path: releases/macos/iiSU_Asset_Tool_macOS.zip
+        path: releases/iiSU_Asset_Tool_macOS.dmg
 
   create-release:
     needs: [build-windows, build-macos]
@@ -114,7 +158,7 @@ jobs:
       with:
         files: |
           iiSU_Asset_Tool_Windows.zip
-          iiSU_Asset_Tool_macOS.zip
+          iiSU_Asset_Tool_macOS.dmg
         draft: false
         prerelease: false
       env:
