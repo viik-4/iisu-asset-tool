@@ -30,10 +30,11 @@ import run_backend
 
 class BackendCallbacks(QObject):
     """Qt signals for backend callbacks."""
-    progress = Signal(int, int)
+    progress = Signal(int, int)  # done, total
     log = Signal(str)
     finished = Signal(bool, str)
     preview = Signal(str)
+    current_item = Signal(str, str)  # title, platform
 
 
 class ROMBrowserTab(QWidget):
@@ -882,10 +883,15 @@ if ($device) {{
         callbacks.log.connect(self._on_log)
         callbacks.finished.connect(self._on_finished)
         callbacks.preview.connect(self._add_preview)
+        callbacks.current_item.connect(self._on_current_item)
+
+        # Calculate total games across all platforms
+        total_games = sum(len(titles) for titles in by_platform.values())
 
         # Process each platform's games
         def _run():
             try:
+                done_count = 0
                 for platform_key, titles in by_platform.items():
                     if self._cancel_token.is_cancelled:
                         break
@@ -893,6 +899,10 @@ if ($device) {{
                     for title in titles:
                         if self._cancel_token.is_cancelled:
                             break
+
+                        # Emit current item being processed
+                        callbacks.current_item.emit(title, platform_key)
+                        callbacks.progress.emit(done_count, total_games)
 
                         # Process single game - limit=1 ensures only one icon per ROM
                         ok, msg = run_backend.run_job(
@@ -902,15 +912,18 @@ if ($device) {{
                             limit=1,  # Only generate one icon per scanned ROM
                             cancel=self._cancel_token,
                             callbacks={
-                                "progress": lambda d, t: callbacks.progress.emit(d, t),
                                 "log": lambda m: callbacks.log.emit(str(m)),
                                 "preview": lambda p: callbacks.preview.emit(str(p)),
+                                "request_selection": self._request_artwork_selection,
                             },
                             search_term=title,
                             interactive_mode=self.interactive_check.isChecked(),
                             download_heroes=self.hero_check.isChecked(),
                             hero_count=1  # Only one hero image per ROM
                         )
+
+                        done_count += 1
+                        callbacks.progress.emit(done_count, total_games)
 
                 callbacks.finished.emit(True, "Processing complete")
 
@@ -932,7 +945,13 @@ if ($device) {{
         if total > 0:
             pct = int((done / total) * 100)
             self.progress.setValue(pct)
-            self.progress.setFormat(f"{done}/{total}")
+            self.progress.setFormat(f"{done}/{total} ({pct}%)")
+
+    def _on_current_item(self, title: str, platform: str):
+        """Handle current item update - show what's being processed."""
+        # Truncate long titles for display
+        display_title = title if len(title) <= 40 else title[:37] + "..."
+        self.status_label.setText(f"Processing: {display_title} [{platform}]")
 
     def _on_log(self, msg: str):
         """Handle log message."""
@@ -945,6 +964,64 @@ if ($device) {{
             self._log_messages = self._log_messages[-1000:]
         # Print to console as well
         print(log_entry)
+
+    # ---------- Interactive mode ----------
+    def _request_artwork_selection(self, title: str, platform: str, artwork_options):
+        """
+        Request user to select artwork from options.
+        Called from worker thread, so must use thread-safe Qt mechanisms.
+        Returns selected index, None if skipped, -1 if cancelled all.
+        """
+        from artwork_picker_dialog import ArtworkPickerDialog
+        from queue import Queue
+        from PySide6.QtCore import QMetaObject, Qt
+
+        self._on_log(f"[INTERACTIVE] Request for {title} with {len(artwork_options)} options")
+
+        # Store data in instance variables so main thread can access them
+        self._dialog_title = title
+        self._dialog_platform = platform
+        self._dialog_options = artwork_options
+        self._dialog_result = Queue()
+
+        # Use QMetaObject.invokeMethod to run on main thread
+        QMetaObject.invokeMethod(
+            self,
+            "_show_selection_dialog_on_main_thread",
+            Qt.ConnectionType.BlockingQueuedConnection
+        )
+
+        # Get result from queue
+        result = self._dialog_result.get()
+        self._on_log(f"[INTERACTIVE] Got result: {result}")
+        return result
+
+    @Slot()
+    def _show_selection_dialog_on_main_thread(self):
+        """Show dialog on main thread - called via invokeMethod."""
+        from artwork_picker_dialog import ArtworkPickerDialog
+        try:
+            self._on_log(f"[INTERACTIVE] Showing dialog for {self._dialog_title}")
+
+            dialog = ArtworkPickerDialog(
+                title=self._dialog_title,
+                platform=self._dialog_platform,
+                artwork_options=self._dialog_options,
+                parent=self
+            )
+
+            # Show dialog modally
+            dialog_result = dialog.exec()
+            selected = dialog.get_selected_index()
+
+            self._on_log(f"[INTERACTIVE] Dialog result: exec={dialog_result}, selected={selected}")
+            self._dialog_result.put(selected)
+
+        except Exception as e:
+            import traceback
+            self._on_log(f"[ERROR] Dialog exception: {e}")
+            self._on_log(f"[ERROR] Traceback: {traceback.format_exc()}")
+            self._dialog_result.put(None)
 
     def _on_finished(self, ok: bool, msg: str):
         """Handle processing completion."""
@@ -1384,7 +1461,7 @@ if ($device) {{
 
     def _show_logs_dialog(self):
         """Show logs dialog with processing history."""
-        from PySide6.QtWidgets import QDialog, QTextEdit, QDialogButtonBox
+        from PySide6.QtWidgets import QDialog, QTextEdit, QDialogButtonBox, QApplication
 
         dialog = QDialog(self)
         dialog.setWindowTitle("Processing Logs")
@@ -1430,8 +1507,17 @@ if ($device) {{
         btn_clear.clicked.connect(lambda: (self._log_messages.clear(), log_text.clear(), info_label.setText("0 log entries")))
         button_row.addWidget(btn_clear)
 
+        def copy_to_clipboard():
+            if self._log_messages:
+                clipboard = QApplication.clipboard()
+                clipboard.setText("\n".join(self._log_messages))
+                btn_copy.setText("Copied!")
+                # Reset button text after 2 seconds
+                from PySide6.QtCore import QTimer
+                QTimer.singleShot(2000, lambda: btn_copy.setText("Copy to Clipboard"))
+
         btn_copy = QPushButton("Copy to Clipboard")
-        btn_copy.clicked.connect(lambda: QApplication.clipboard().setText("\n".join(self._log_messages)) if self._log_messages else None)
+        btn_copy.clicked.connect(copy_to_clipboard)
         button_row.addWidget(btn_copy)
 
         button_row.addStretch()

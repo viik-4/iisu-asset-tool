@@ -5,6 +5,7 @@ import time
 import hashlib
 import zipfile
 import threading
+import unicodedata
 from io import BytesIO
 from pathlib import Path
 from typing import Dict, List, Optional, Any, Tuple
@@ -16,6 +17,33 @@ from urllib.parse import unquote
 import requests
 import yaml
 from PIL import Image, ImageOps, ImageChops, ImageFilter
+
+# Import search utilities from rom_parser
+try:
+    from rom_parser import normalize_for_search, get_search_variants, clean_game_title
+except ImportError:
+    # Fallback implementations if rom_parser is not available
+    def clean_game_title(name: str) -> str:
+        """Basic fallback title cleaning."""
+        name = re.sub(r'\s*\[[^\]]*\]', '', name)
+        name = re.sub(r'\s*\([^)]*\)', '', name)
+        name = re.sub(r'\s+v\d+(\.\d+)*', '', name, flags=re.IGNORECASE)
+        return re.sub(r'\s+', ' ', name).strip()
+
+    def normalize_for_search(name: str) -> str:
+        """Basic fallback normalization."""
+        name = clean_game_title(name)
+        normalized = unicodedata.normalize('NFD', name)
+        return ''.join(c for c in normalized if unicodedata.category(c) != 'Mn')
+
+    def get_search_variants(name: str) -> List[str]:
+        """Basic fallback variants."""
+        clean = clean_game_title(name)
+        normalized = normalize_for_search(name)
+        variants = [clean]
+        if normalized != clean:
+            variants.append(normalized)
+        return variants
 
 
 # ==========================
@@ -171,9 +199,52 @@ def sgdb_get(api_key: str, base_url: str, path: str, params: Optional[dict], tim
     return data
 
 def search_autocomplete(api_key: str, base_url: str, term: str, timeout_s: int) -> List[dict]:
+    """Search SteamGridDB autocomplete with a single term."""
     term_q = requests.utils.quote(term)
     data = sgdb_get(api_key, base_url, f"search/autocomplete/{term_q}", None, timeout_s)
     return data.get("data", []) or []
+
+
+def search_with_variants(api_key: str, base_url: str, title: str, timeout_s: int, delay_s: float = 0.25, callbacks=None) -> List[dict]:
+    """
+    Search SteamGridDB using multiple search term variants.
+    Tries cleaned name, normalized name (no accents), and other variations.
+    Returns combined unique results.
+    """
+    variants = get_search_variants(title)
+    all_results = []
+    seen_ids = set()
+
+    _emit_log(callbacks, f"[DEBUG] Search variants for '{title}': {variants}")
+
+    for variant in variants:
+        if not variant:
+            continue
+
+        try:
+            results = search_autocomplete(api_key, base_url, variant, timeout_s)
+
+            # Add unique results
+            for result in results:
+                rid = result.get("id")
+                if rid and rid not in seen_ids:
+                    seen_ids.add(rid)
+                    all_results.append(result)
+
+            if delay_s > 0 and variants.index(variant) < len(variants) - 1:
+                time.sleep(delay_s)
+
+            # If we found good results, we can stop
+            if len(all_results) >= 5:
+                break
+
+        except Exception as e:
+            _emit_log(callbacks, f"[DEBUG] Search variant '{variant}' failed: {e}")
+            continue
+
+    _emit_log(callbacks, f"[DEBUG] Found {len(all_results)} unique results across {len(variants)} variants")
+    return all_results
+
 
 def get_game_by_id(api_key: str, base_url: str, game_id: str, timeout_s: int) -> dict:
     data = sgdb_get(api_key, base_url, f"games/id/{game_id}", None, timeout_s)
@@ -328,8 +399,18 @@ def libretro_sanitize_filename(name: str) -> str:
     return s
 
 def libretro_candidate_names(title: str) -> List[str]:
-    base = libretro_sanitize_filename(title)
+    """Generate candidate names for Libretro thumbnail search."""
+    # Clean the title first
+    clean_title = clean_game_title(title)
+    base = libretro_sanitize_filename(clean_title)
+
+    # Also try normalized version (no accents)
+    normalized = normalize_for_search(title)
+    normalized_base = libretro_sanitize_filename(normalized)
+
     candidates = [base]
+    if normalized_base != base:
+        candidates.append(normalized_base)
 
     regions = [
         "World", "USA", "Europe", "Japan",
@@ -1128,21 +1209,27 @@ def fetch_multiple_art_from_steamgriddb(
     """
     Fetch multiple artwork options from SteamGridDB.
     Returns list of (bytes, source_tag) tuples.
+    Uses smart search with multiple variants for better matching.
     """
     results = []
 
     try:
-        _emit_log(callbacks, f"[DEBUG] SteamGridDB: Searching for multiple results for '{title}'...")
-        autocomplete_results = search_autocomplete(api_key, base_url, title, timeout_s)
+        # Clean the title first for better matching
+        search_title = normalize_for_search(title)
+        _emit_log(callbacks, f"[DEBUG] SteamGridDB: Searching for '{title}' (normalized: '{search_title}')...")
+
+        # Use variant search for better results
+        autocomplete_results = search_with_variants(api_key, base_url, title, timeout_s, delay_s, callbacks)
 
         if not autocomplete_results:
+            _emit_log(callbacks, f"[DEBUG] SteamGridDB: No results found for any search variant")
             return results
 
         if delay_s > 0:
             time.sleep(delay_s)
 
-        # Get best game ID
-        game_id = choose_best_game_id(api_key, base_url, timeout_s, delay_s, title, platform_hints, autocomplete_results, 8)
+        # Get best game ID using the normalized title for comparison
+        game_id = choose_best_game_id(api_key, base_url, timeout_s, delay_s, search_title, platform_hints, autocomplete_results, 8)
         if not game_id:
             return results
 
@@ -1215,43 +1302,29 @@ def fetch_art_from_steamgriddb_square(
 ) -> Optional[Tuple[bytes, str]]:
     # returns (bytes, source_tag) or None
 
-    # Write to debug file
-    import datetime
-    debug_file = Path("steamgriddb_debug.log")
-    with debug_file.open("a", encoding="utf-8") as f:
-        f.write(f"[{datetime.datetime.now()}] Function called for: {title}\n")
-        f.flush()
+    # Clean and normalize the title for better search
+    search_title = normalize_for_search(title)
 
-    _emit_log(callbacks, f"[DEBUG] SteamGridDB: Function called for '{title}'")
+    _emit_log(callbacks, f"[DEBUG] SteamGridDB: Function called for '{title}' (normalized: '{search_title}')")
 
     try:
-        with debug_file.open("a", encoding="utf-8") as f:
-            f.write(f"[{datetime.datetime.now()}] About to call search_autocomplete\n")
-            f.flush()
+        _emit_log(callbacks, f"[DEBUG] SteamGridDB: Searching with variants for '{title}'...")
+        # Use smart variant search for better results
+        results = search_with_variants(api_key, base_url, title, timeout_s, delay_s, callbacks)
 
-        _emit_log(callbacks, f"[DEBUG] SteamGridDB: Searching autocomplete for '{title}'...")
-        results = search_autocomplete(api_key, base_url, title, timeout_s)
-
-        with debug_file.open("a", encoding="utf-8") as f:
-            f.write(f"[{datetime.datetime.now()}] Autocomplete returned {len(results) if results else 0} results\n")
-            f.flush()
-
-        _emit_log(callbacks, f"[DEBUG] SteamGridDB: Autocomplete returned {len(results) if results else 0} results")
+        _emit_log(callbacks, f"[DEBUG] SteamGridDB: Search returned {len(results) if results else 0} results")
         if delay_s > 0:
             time.sleep(delay_s)
     except Exception as e:
-        with debug_file.open("a", encoding="utf-8") as f:
-            f.write(f"[{datetime.datetime.now()}] Exception: {type(e).__name__}: {e}\n")
-            f.flush()
-
-        _emit_log(callbacks, f"[DEBUG] SteamGridDB: Autocomplete failed - {type(e).__name__}: {e}")
+        _emit_log(callbacks, f"[DEBUG] SteamGridDB: Search failed - {type(e).__name__}: {e}")
         return None
     if not results:
-        _emit_log(callbacks, f"[DEBUG] SteamGridDB: No autocomplete results for '{title}'")
+        _emit_log(callbacks, f"[DEBUG] SteamGridDB: No results found for '{title}'")
         return None
 
     _emit_log(callbacks, f"[DEBUG] SteamGridDB: Choosing best game ID from {len(results)} results...")
-    game_id = choose_best_game_id(api_key, base_url, timeout_s, delay_s, title, platform_hints, results, 8)
+    # Use the normalized title for matching
+    game_id = choose_best_game_id(api_key, base_url, timeout_s, delay_s, search_title, platform_hints, results, 8)
     if not game_id:
         _emit_log(callbacks, f"[DEBUG] SteamGridDB: No matching game ID found")
         return None
@@ -1519,6 +1592,10 @@ def fetch_art_from_igdb(
         if debug_log and callable(debug_log):
             debug_log(msg)
 
+    # Clean and normalize title for better search
+    search_title = normalize_for_search(title)
+    _log(f"[DEBUG] IGDB: Searching for '{title}' (normalized: '{search_title}')")
+
     # Get platform ID
     platform_id = platform_map.get(platform_key)
     if not platform_id:
@@ -1535,7 +1612,7 @@ def fetch_art_from_igdb(
     _log(f"[DEBUG] IGDB: Got access token: {token[:20]}...")
 
     try:
-        # Search for game
+        # Search for game using normalized title
         headers = {
             "Client-ID": client_id,
             "Authorization": f"Bearer {token}",
@@ -1544,9 +1621,10 @@ def fetch_art_from_igdb(
 
         # IGDB uses POST with Apicalypse query language
         search_url = f"{base_url.rstrip('/')}/games"
-        query = f'search "{title}"; fields name,cover.image_id,platforms; where platforms = ({platform_id}); limit 5;'
+        # Use normalized title for search
+        query = f'search "{search_title}"; fields name,cover.image_id,platforms; where platforms = ({platform_id}); limit 5;'
 
-        _log(f"[DEBUG] IGDB: Searching for '{title}' on platform {platform_id}...")
+        _log(f"[DEBUG] IGDB: Searching for '{search_title}' on platform {platform_id}...")
         r = requests.post(search_url, headers=headers, data=query, timeout=timeout_s)
         r.raise_for_status()
         games = r.json()
@@ -1616,6 +1694,10 @@ def fetch_art_from_thegamesdb(
         if debug_log and callable(debug_log):
             debug_log(msg)
 
+    # Clean and normalize title for better search
+    search_title = normalize_for_search(title)
+    _log(f"[DEBUG] TheGamesDB: Searching for '{title}' (normalized: '{search_title}')")
+
     # Get platform ID
     platform_id = platform_map.get(platform_key)
     if not platform_id:
@@ -1624,15 +1706,15 @@ def fetch_art_from_thegamesdb(
     _log(f"[DEBUG] TheGamesDB: Platform {platform_key} -> ID {platform_id}")
 
     try:
-        # Search for game
+        # Search for game using normalized title
         search_url = f"{base_url.rstrip('/')}/Games/ByGameName"
         params = {
             "apikey": api_key,
-            "name": title,
+            "name": search_title,
             "filter[platform]": platform_id
         }
 
-        _log(f"[DEBUG] TheGamesDB: Searching for '{title}' on platform {platform_id}...")
+        _log(f"[DEBUG] TheGamesDB: Searching for '{search_title}' on platform {platform_id}...")
         r = requests.get(search_url, params=params, timeout=timeout_s)
         r.raise_for_status()
         data = r.json()

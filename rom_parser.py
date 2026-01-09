@@ -140,7 +140,7 @@ FOLDER_TO_PLATFORM = _build_folder_to_platform_map()
 def clean_game_title(name: str) -> str:
     """
     Clean a ROM filename/folder name to extract a clean game title.
-    Removes region tags, version info, dump info, file extensions, etc.
+    Removes region tags, version info, dump info, file extensions, file sizes, etc.
     """
     # Remove file extension if present
     name = re.sub(r'\.(zip|7z|rar|' + '|'.join(ext.strip('.') for exts in ROM_EXTENSIONS.values() for ext in exts) + r')$', '', name, flags=re.IGNORECASE)
@@ -151,23 +151,127 @@ def clean_game_title(name: str) -> str:
     # Remove square bracket tags like [!], [U], [E], [J], [h], [b], etc.
     name = re.sub(r'\s*\[[^\]]*\]', '', name)
 
+    # Remove file size patterns like (6.01 GB), (1.2 MB), (500 KB), (123456789)
+    name = re.sub(r'\s*\(\s*\d+\.?\d*\s*(GB|MB|KB|B|bytes?)?\s*\)', '', name, flags=re.IGNORECASE)
+    # Also handle standalone numbers in parens (often file sizes without units)
+    name = re.sub(r'\s*\(\s*\d{6,}\s*\)', '', name)
+
     # Remove parenthetical region/version tags
     # Match patterns like (USA), (Europe), (Rev A), (v1.0), (En,Fr,De), etc.
-    name = re.sub(r'\s*\((USA|Europe|Japan|World|En|Fr|De|Es|It|Ja|Ko|Zh|Rev\s*[A-Z0-9]*|v\d+[.\d]*|Proto|Beta|Demo|Sample|Unl|Pirate|Virtual Console|[A-Za-z]{2}(,[A-Za-z]{2})*)\)', '', name, flags=re.IGNORECASE)
+    name = re.sub(r'\s*\((USA|US|Europe|EU|Japan|JP|World|WLD|En|Fr|De|Es|It|Ja|Ko|Zh|Rev\s*[A-Z0-9]*|v\d+[.\d]*|Proto|Beta|Alpha|Demo|Sample|Unl|Pirate|Virtual Console|Switch|NSW|PS4|PS5|Xbox|XB1|PC|[A-Za-z]{2}(,[A-Za-z]{2})*)\)', '', name, flags=re.IGNORECASE)
+
+    # Remove version patterns like v1.0.1, V2.3, version 1.0
+    name = re.sub(r'\s*v\d+(\.\d+)*', '', name, flags=re.IGNORECASE)
+    name = re.sub(r'\s*version\s*\d+(\.\d+)*', '', name, flags=re.IGNORECASE)
 
     # Remove parenthetical disc numbers
     name = re.sub(r'\s*\(Disc\s*\d+[^)]*\)', '', name, flags=re.IGNORECASE)
 
-    # Remove trailing version numbers
-    name = re.sub(r'\s+v\d+(\.\d+)*$', '', name, flags=re.IGNORECASE)
+    # Remove update/DLC/patch tags
+    name = re.sub(r'\s*\+?\s*(Update|DLC|Patch|Fix|Hotfix)\s*v?\d*(\.\d+)*', '', name, flags=re.IGNORECASE)
+
+    # Remove any remaining empty parentheses
+    name = re.sub(r'\s*\(\s*\)', '', name)
 
     # Remove leading/trailing whitespace and normalize spaces
     name = re.sub(r'\s+', ' ', name).strip()
 
-    # Remove trailing dashes or underscores
-    name = name.rstrip('-_ ')
+    # Remove trailing dashes, underscores, or dots
+    name = name.rstrip('-_. ')
 
     return name
+
+
+def normalize_for_search(name: str) -> str:
+    """
+    Normalize a game title for search - handles accented characters,
+    special characters, and common variations.
+    Returns a search-friendly version of the name.
+    """
+    import unicodedata
+
+    # First clean the title
+    name = clean_game_title(name)
+
+    # Normalize unicode - decompose accented characters
+    # NFD breaks é into e + combining accent, then we strip combining chars
+    normalized = unicodedata.normalize('NFD', name)
+    # Remove combining diacritical marks (accents)
+    ascii_name = ''.join(c for c in normalized if unicodedata.category(c) != 'Mn')
+
+    # Also create a version with common substitutions
+    # Handle special game title patterns
+    search_name = ascii_name
+
+    # Common character substitutions
+    replacements = {
+        '&': 'and',
+        '+': 'plus',
+        '@': 'at',
+        '™': '',
+        '®': '',
+        '©': '',
+        ''': "'",
+        ''': "'",
+        '"': '"',
+        '"': '"',
+        '–': '-',
+        '—': '-',
+        '…': '...',
+    }
+    for old, new in replacements.items():
+        search_name = search_name.replace(old, new)
+
+    # Remove most punctuation but keep apostrophes and hyphens for names
+    search_name = re.sub(r"[^\w\s'-]", ' ', search_name)
+
+    # Normalize whitespace
+    search_name = re.sub(r'\s+', ' ', search_name).strip()
+
+    return search_name
+
+
+def get_search_variants(name: str) -> List[str]:
+    """
+    Generate multiple search variants for a game title.
+    Useful for trying different search terms if the first doesn't match.
+    """
+    variants = []
+
+    # Original cleaned name
+    clean = clean_game_title(name)
+    if clean:
+        variants.append(clean)
+
+    # Normalized (no accents) version
+    normalized = normalize_for_search(name)
+    if normalized and normalized != clean:
+        variants.append(normalized)
+
+    # Try without subtitles (text after : or -)
+    if ':' in clean:
+        main_title = clean.split(':')[0].strip()
+        if main_title and main_title not in variants:
+            variants.append(main_title)
+
+    if ' - ' in clean:
+        main_title = clean.split(' - ')[0].strip()
+        if main_title and main_title not in variants:
+            variants.append(main_title)
+
+    # Handle roman numerals vs numbers (e.g., "III" vs "3")
+    roman_map = [
+        (r'\bIII\b', '3'), (r'\bII\b', '2'), (r'\bIV\b', '4'),
+        (r'\bVI\b', '6'), (r'\bVII\b', '7'), (r'\bVIII\b', '8'),
+        (r'\bIX\b', '9'), (r'\bXI\b', '11'), (r'\bXII\b', '12'),
+    ]
+    for pattern, replacement in roman_map:
+        if re.search(pattern, clean):
+            variant = re.sub(pattern, replacement, clean)
+            if variant not in variants:
+                variants.append(variant)
+
+    return variants
 
 
 def get_all_rom_extensions() -> Set[str]:
@@ -186,6 +290,59 @@ def is_rom_file(path: Path) -> bool:
 def is_archive_file(path: Path) -> bool:
     """Check if a file is an archive that might contain ROMs."""
     return path.suffix.lower() in {'.zip', '.7z', '.rar'}
+
+
+# Files and patterns to exclude from ROM scanning
+NON_ROM_FILES = {
+    # System files
+    'systeminfo', 'thumbs.db', 'desktop.ini', '.ds_store', 'icon.ico',
+    # Common metadata/info files
+    'readme', 'readme.txt', 'readme.md', 'info.txt', 'nfo', 'info',
+    # Save files and databases
+    'save', 'saves', 'savegame', 'savedata', 'battery',
+    # Configuration
+    'config', 'settings', 'options', 'preferences',
+    # Cue/bin related
+    'cue', 'm3u', 'playlist',
+    # Cheats and patches
+    'cheats', 'cheat', 'cht', 'patch', 'ips', 'bps', 'ups',
+    # Screenshots and media
+    'screenshot', 'screenshots', 'boxart', 'cover', 'manual', 'artwork',
+    # Emulator specific
+    'retroarch', 'core', 'cores', 'system', 'bios',
+}
+
+NON_ROM_EXTENSIONS = {
+    '.txt', '.nfo', '.diz', '.doc', '.docx', '.pdf', '.htm', '.html',
+    '.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', '.ico', '.svg',
+    '.xml', '.json', '.yaml', '.yml', '.ini', '.cfg', '.conf', '.config',
+    '.log', '.dat', '.db', '.sqlite', '.sav', '.srm', '.sta', '.state',
+    '.m3u', '.cue', '.sfv', '.md5', '.sha1', '.par', '.par2',
+    '.exe', '.dll', '.bat', '.sh', '.cmd', '.ps1',
+    '.ips', '.bps', '.ups', '.xdelta', '.cht',
+    '.mp3', '.ogg', '.wav', '.flac', '.mp4', '.avi', '.mkv',
+}
+
+
+def is_non_rom_file(path: Path) -> bool:
+    """Check if a file should be excluded from ROM scanning."""
+    name_lower = path.stem.lower()
+    ext_lower = path.suffix.lower()
+
+    # Check extension
+    if ext_lower in NON_ROM_EXTENSIONS:
+        return True
+
+    # Check filename
+    if name_lower in NON_ROM_FILES:
+        return True
+
+    # Check if filename starts with common non-ROM prefixes
+    non_rom_prefixes = ('readme', 'info', 'nfo', 'cheats', 'manual', 'cover', 'boxart')
+    if any(name_lower.startswith(prefix) for prefix in non_rom_prefixes):
+        return True
+
+    return False
 
 
 def detect_platform_from_folder(folder_name: str) -> Optional[str]:
@@ -268,6 +425,9 @@ def scan_platform_folder(platform_path: Path, platform_key: str) -> List[Tuple[s
 
     for item in platform_path.iterdir():
         if item.is_dir():
+            # Skip system/hidden folders
+            if item.name.startswith('.') or item.name.lower() in NON_ROM_FILES:
+                continue
             # Game folder - use folder name as title
             game_title = clean_game_title(item.name)
             if game_title and game_title.lower() not in seen_titles:
@@ -275,6 +435,9 @@ def scan_platform_folder(platform_path: Path, platform_key: str) -> List[Tuple[s
                 games.append((game_title, item))
 
         elif item.is_file():
+            # Skip non-ROM files (system files, metadata, etc.)
+            if is_non_rom_file(item):
+                continue
             # Check if it's a ROM file or archive
             if item.suffix.lower() in platform_exts or is_archive_file(item):
                 game_title = clean_game_title(item.stem)
@@ -312,12 +475,16 @@ def scan_generic_folder(folder_path: Path, platform_key: Optional[str] = None) -
 
     for item in folder_path.iterdir():
         if item.is_dir():
+            # Skip system/hidden folders
+            if item.name.startswith('.') or item.name.lower() in NON_ROM_FILES:
+                continue
             # Check if folder contains ROMs (treat as game folder)
             has_roms = False
             for sub_item in item.iterdir():
-                if sub_item.is_file() and (sub_item.suffix.lower() in valid_exts or is_archive_file(sub_item)):
-                    has_roms = True
-                    break
+                if sub_item.is_file() and not is_non_rom_file(sub_item):
+                    if sub_item.suffix.lower() in valid_exts or is_archive_file(sub_item):
+                        has_roms = True
+                        break
 
             if has_roms:
                 game_title = clean_game_title(item.name)
@@ -326,6 +493,9 @@ def scan_generic_folder(folder_path: Path, platform_key: Optional[str] = None) -
                     games.append((game_title, item))
 
         elif item.is_file():
+            # Skip non-ROM files (system files, metadata, etc.)
+            if is_non_rom_file(item):
+                continue
             if item.suffix.lower() in valid_exts or is_archive_file(item):
                 game_title = clean_game_title(item.stem)
                 if game_title and game_title.lower() not in seen_titles:
