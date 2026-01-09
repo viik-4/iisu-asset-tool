@@ -46,21 +46,6 @@ desktop.ini
 *.log
 .env
 
-# Asset directories (included in releases only, not in source repo)
-borders/
-templates/
-fonts/
-platform_icons/
-src/
-logo.png
-iisu_theme.qss
-
-# Keep README files in asset directories if they exist
-!borders/README.md
-!templates/README.md
-!fonts/README.md
-!platform_icons/README.md
-!src/README.md
 
 # Debug and test files
 debug_*.py
