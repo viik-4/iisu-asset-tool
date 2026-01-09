@@ -1,0 +1,78 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtual environments
+venv/
+env/
+ENV/
+
+# Build artifacts
+build/
+dist/
+releases/
+*.egg-info/
+
+# Cache and data
+data/cache/
+data/dataset_cache/
+*.db
+*.sqlite
+
+# Output directories
+output/
+review/
+
+# IDE
+.vscode/
+.idea/
+.vs/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Config (optional - uncomment if you don't want to share API keys)
+# config.yaml
+
+# Logs
+*.log
+.env
+
+# Asset directories (included in releases only, not in source repo)
+borders/
+templates/
+fonts/
+platform_icons/
+src/
+logo.png
+iisu_theme.qss
+
+# Keep README files in asset directories if they exist
+!borders/README.md
+!templates/README.md
+!fonts/README.md
+!platform_icons/README.md
+!src/README.md
+
+# Debug and test files
+debug_*.py
+debug_*.png
+test_*.py
+inspect_*.py
+*_debug.log
+
+# Temp files
+*.tmp
+*.bak
+
+# Cache directories
+.cache/
+__pycache__/

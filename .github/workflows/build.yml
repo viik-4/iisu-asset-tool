@@ -1,0 +1,121 @@
+name: Build Releases
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install PySide6
+        pip install pyinstaller
+
+    - name: Build Windows executable
+      run: |
+        pyinstaller build_windows.spec
+
+    - name: Package Windows release
+      shell: pwsh
+      run: |
+        New-Item -ItemType Directory -Force -Path releases\windows\iiSU_Asset_Tool
+        Copy-Item dist\iiSU_Asset_Tool.exe releases\windows\iiSU_Asset_Tool\
+        Copy-Item -Recurse borders releases\windows\iiSU_Asset_Tool\
+        Copy-Item -Recurse fonts releases\windows\iiSU_Asset_Tool\
+        Copy-Item -Recurse platform_icons releases\windows\iiSU_Asset_Tool\
+        Copy-Item -Recurse templates releases\windows\iiSU_Asset_Tool\
+        Copy-Item -Recurse src releases\windows\iiSU_Asset_Tool\
+        Copy-Item config.yaml releases\windows\iiSU_Asset_Tool\
+        "iiSU Asset Tool - Windows" | Out-File releases\windows\iiSU_Asset_Tool\README.txt
+        Compress-Archive -Path releases\windows\iiSU_Asset_Tool -DestinationPath releases\windows\iiSU_Asset_Tool_Windows.zip
+
+    - name: Upload Windows artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: windows-build
+        path: releases/windows/iiSU_Asset_Tool_Windows.zip
+
+  build-macos:
+    runs-on: macos-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install PySide6
+        pip install pyinstaller
+
+    - name: Build macOS app
+      run: |
+        pyinstaller build_macos.spec
+
+    - name: Package macOS release
+      run: |
+        mkdir -p releases/macos/iiSU_Asset_Tool
+        cp -R "dist/iiSU Asset Tool.app" releases/macos/iiSU_Asset_Tool/
+        cp -R borders releases/macos/iiSU_Asset_Tool/
+        cp -R fonts releases/macos/iiSU_Asset_Tool/
+        cp -R platform_icons releases/macos/iiSU_Asset_Tool/
+        cp -R templates releases/macos/iiSU_Asset_Tool/
+        cp -R src releases/macos/iiSU_Asset_Tool/
+        cp config.yaml releases/macos/iiSU_Asset_Tool/
+        echo "iiSU Asset Tool - macOS" > releases/macos/iiSU_Asset_Tool/README.txt
+        cd releases/macos
+        zip -r iiSU_Asset_Tool_macOS.zip iiSU_Asset_Tool
+
+    - name: Upload macOS artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: macos-build
+        path: releases/macos/iiSU_Asset_Tool_macOS.zip
+
+  create-release:
+    needs: [build-windows, build-macos]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+
+    steps:
+    - name: Download Windows artifact
+      uses: actions/download-artifact@v4
+      with:
+        name: windows-build
+        path: ./
+
+    - name: Download macOS artifact
+      uses: actions/download-artifact@v4
+      with:
+        name: macos-build
+        path: ./
+
+    - name: Create Release
+      uses: softprops/action-gh-release@v2
+      with:
+        files: |
+          iiSU_Asset_Tool_Windows.zip
+          iiSU_Asset_Tool_macOS.zip
+        draft: false
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
