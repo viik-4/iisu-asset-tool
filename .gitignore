@@ -61,3 +61,4 @@ inspect_*.py
 # Cache directories
 .cache/
 __pycache__/
+/.claude
