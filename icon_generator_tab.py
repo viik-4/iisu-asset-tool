@@ -85,6 +85,13 @@ class IconGeneratorTab(QWidget):
         self.interactive_mode.setStyleSheet("QCheckBox { color: #E9E9E9; }")
         row_filter.addWidget(self.interactive_mode)
 
+        # Hero images checkbox
+        self.download_heroes = QCheckBox("Download Heroes")
+        self.download_heroes.setToolTip("Also download hero/banner images from SteamGridDB")
+        self.download_heroes.setStyleSheet("QCheckBox { color: #E9E9E9; }")
+        self.download_heroes.setChecked(True)
+        row_filter.addWidget(self.download_heroes)
+
         row_filter.addStretch(1)
         left.addLayout(row_filter)
 
@@ -1015,7 +1022,9 @@ class IconGeneratorTab(QWidget):
                     source_order=source_order_config,
                     search_term=search_term,
                     letter_filter=letter_filter,
-                    interactive_mode=self.interactive_mode.isChecked()
+                    interactive_mode=self.interactive_mode.isChecked(),
+                    download_heroes=self.download_heroes.isChecked(),
+                    hero_count=1
                 )
 
             except Exception as e:

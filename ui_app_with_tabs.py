@@ -42,6 +42,7 @@ from icon_generator_tab import IconGeneratorTab
 from border_generator_tab import BorderGeneratorTab
 from custom_image_tab import CustomImageTab
 from cover_generator_tab import CoverGeneratorTab
+from rom_browser_tab import ROMBrowserTab
 
 
 class MainWindowWithTabs(QMainWindow):
@@ -136,6 +137,8 @@ class MainWindowWithTabs(QMainWindow):
         self.tabs.setMovable(False)
 
         # Add tabs
+        self.rom_browser_tab = ROMBrowserTab()
+        self.tabs.addTab(self.rom_browser_tab, "ROM Browser")
         self.tabs.addTab(IconGeneratorTab(), "Icon Scraper")
         self.tabs.addTab(CustomImageTab(), "Custom Icons")
         self.tabs.addTab(BorderGeneratorTab(), "Custom Borders")
@@ -200,17 +203,42 @@ class MainWindowWithTabs(QMainWindow):
     def _open_settings(self):
         """Open the settings dialog."""
         from options_dialog import OptionsDialog
+        import yaml
+        from pathlib import Path
 
         # Get the current icon generator tab to access its settings
-        icon_tab = self.tabs.widget(0)  # Icon Scraper is the first tab
+        icon_tab = self.tabs.widget(1)  # Icon Scraper is now the second tab (index 1)
+
+        # Load current ROM settings from config
+        rom_settings = {}
+        hero_settings = {}
+        if hasattr(icon_tab, 'config_path'):
+            try:
+                cfg_path = Path(icon_tab.config_path)
+                if cfg_path.exists():
+                    with open(cfg_path, "r", encoding="utf-8") as f:
+                        cfg = yaml.safe_load(f) or {}
+                    rom_settings = cfg.get("rom_directory", {})
+                    hero_settings = cfg.get("hero_images", {})
+            except Exception:
+                pass
+
         if hasattr(icon_tab, 'config_path'):
             dialog = OptionsDialog(
                 parent=self,
                 config_path=icon_tab.config_path,
                 workers=icon_tab.workers_value,
                 limit=icon_tab.limit_value,
-                source_priority_widget=icon_tab.source_priority
+                source_priority_widget=icon_tab.source_priority,
+                rom_directory_settings=rom_settings
             )
+
+            # Set hero settings if available
+            if hero_settings:
+                dialog.hero_settings = hero_settings
+                dialog.hero_enabled.setChecked(hero_settings.get("enabled", True))
+                dialog.hero_count.setValue(hero_settings.get("count", 1))
+                dialog.hero_save_with_icons.setChecked(hero_settings.get("save_with_icons", True))
 
             if dialog.exec():
                 # Update the icon tab's stored values
@@ -224,6 +252,46 @@ class MainWindowWithTabs(QMainWindow):
 
                 # Reload platforms if config changed
                 icon_tab.load_platforms_from_config()
+
+                # Update ROM browser tab with new settings
+                rom_dir_settings = dialog.get_rom_directory_settings()
+                hero_settings = dialog.get_hero_settings()
+
+                # Save settings to config
+                self._save_rom_settings_to_config(
+                    icon_tab.config_path,
+                    rom_dir_settings,
+                    hero_settings
+                )
+
+                # Update ROM browser tab
+                self.rom_browser_tab.set_rom_path(rom_dir_settings.get("rom_path", ""))
+                self.rom_browser_tab.set_hero_settings(
+                    hero_settings.get("enabled", True),
+                    hero_settings.get("count", 1)
+                )
+
+    def _save_rom_settings_to_config(self, config_path, rom_settings, hero_settings):
+        """Save ROM and hero settings to config file."""
+        import yaml
+        from pathlib import Path
+
+        cfg_path = Path(config_path)
+        if not cfg_path.exists():
+            return
+
+        try:
+            with open(cfg_path, "r", encoding="utf-8") as f:
+                cfg = yaml.safe_load(f) or {}
+
+            cfg["rom_directory"] = rom_settings
+            cfg["hero_images"] = hero_settings
+
+            with open(cfg_path, "w", encoding="utf-8") as f:
+                yaml.dump(cfg, f, default_flow_style=False, sort_keys=False)
+
+        except Exception as e:
+            print(f"Failed to save ROM settings: {e}")
 
 
 def main():

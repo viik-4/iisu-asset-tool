@@ -128,7 +128,8 @@ platforms:
     publisher: Sony
     year: 2011
     type: handheld
-    wikipedia_url: https://en.wikipedia.org/wiki/List_of_PlayStation_Vita_games_(A–D)
+    wikipedia_url: "https://en.wikipedia.org/wiki/List_of_PlayStation_Vita_games_(A\u2013\
+      D)"
   XBOX:
     border_file: Xbox.png
     publisher: Microsoft
@@ -368,3 +369,12 @@ logo_detection:
   - steamgriddb_square
   min_content_ratio: 0.15
   max_crop_ratio: 0.85
+rom_directory:
+  mode: manual
+  rom_path: ''
+  auto_detect: false
+  remember_last_path: true
+hero_images:
+  enabled: true
+  count: 1
+  save_with_icons: true

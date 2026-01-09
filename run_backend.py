@@ -1291,6 +1291,145 @@ def fetch_art_from_steamgriddb_square(
         return None
 
 
+# ==========================
+# Hero Image Provider (SteamGridDB)
+# ==========================
+def heroes_by_game(
+    api_key: str,
+    base_url: str,
+    game_id: str,
+    dimensions: Optional[List[str]],
+    styles: Optional[List[str]],
+    timeout_s: int
+) -> List[dict]:
+    """Fetch hero images for a game from SteamGridDB."""
+    params = {}
+    if dimensions:
+        params["dimensions"] = ",".join(dimensions) if isinstance(dimensions, list) else dimensions
+    if styles:
+        params["styles"] = ",".join(styles) if isinstance(styles, list) else styles
+    data = sgdb_get(api_key, base_url, f"heroes/game/{game_id}", params or None, timeout_s)
+    return data.get("data", []) or []
+
+
+def fetch_heroes_from_steamgriddb(
+    *,
+    api_key: str,
+    base_url: str,
+    timeout_s: int,
+    delay_s: float,
+    cache_dir: Path,
+    allow_animated: bool,
+    prefer_dimensions: List[str],
+    styles: List[str],
+    platform_key: str,
+    title: str,
+    platform_hints: List[str],
+    max_heroes: int = 1,
+    callbacks=None
+) -> List[Tuple[bytes, str]]:
+    """
+    Fetch hero images from SteamGridDB.
+
+    Hero images are wide banner images typically used for Steam library backgrounds.
+    Common dimensions: 1920x620, 3840x1240
+
+    Returns list of (bytes, filename_hint) tuples.
+    """
+    results = []
+
+    if not api_key:
+        return results
+
+    try:
+        _emit_log(callbacks, f"[HERO] Searching SteamGridDB for heroes: '{title}'...")
+
+        # Search for game
+        autocomplete_results = search_autocomplete(api_key, base_url, title, timeout_s)
+        if not autocomplete_results:
+            _emit_log(callbacks, f"[HERO] No search results for '{title}'")
+            return results
+
+        if delay_s > 0:
+            time.sleep(delay_s)
+
+        # Get best game ID
+        game_id = choose_best_game_id(
+            api_key, base_url, timeout_s, delay_s,
+            title, platform_hints, autocomplete_results, 8
+        )
+
+        if not game_id:
+            _emit_log(callbacks, f"[HERO] No matching game ID for '{title}'")
+            return results
+
+        _emit_log(callbacks, f"[HERO] Found game ID: {game_id}")
+
+        # Fetch heroes
+        heroes = heroes_by_game(api_key, base_url, game_id, prefer_dimensions, styles, timeout_s)
+
+        if not heroes:
+            _emit_log(callbacks, f"[HERO] No hero images found for game ID {game_id}")
+            return results
+
+        _emit_log(callbacks, f"[HERO] Found {len(heroes)} hero images")
+
+        if delay_s > 0:
+            time.sleep(delay_s)
+
+        # Filter and download heroes
+        suitable_heroes = []
+        for hero in heroes:
+            url = hero.get("url", "").strip()
+            if not url:
+                continue
+            if not allow_animated and is_animated(url):
+                continue
+            suitable_heroes.append(hero)
+
+        # Sort by score
+        suitable_heroes.sort(key=lambda x: (x.get("score", 0), x.get("id", 0)), reverse=True)
+
+        # Download top heroes
+        for i, hero in enumerate(suitable_heroes[:max_heroes]):
+            url = hero.get("url")
+            if not url:
+                continue
+
+            try:
+                cache_key = sha256_text(url)
+                cache_path = cache_dir / f"hero_{cache_key}.bin"
+
+                if cache_path.exists():
+                    img_bytes = cache_path.read_bytes()
+                    _emit_log(callbacks, f"[HERO] Using cached hero {i+1}")
+                else:
+                    img_bytes = download_bytes(url, timeout_s)
+                    cache_path.write_bytes(img_bytes)
+                    _emit_log(callbacks, f"[HERO] Downloaded hero {i+1}")
+
+                # Generate filename hint
+                width = hero.get("width", 1920)
+                height = hero.get("height", 620)
+                filename = f"hero_{i+1}_{width}x{height}"
+
+                results.append((img_bytes, filename))
+
+                if delay_s > 0:
+                    time.sleep(delay_s)
+
+            except Exception as e:
+                _emit_log(callbacks, f"[HERO] Failed to download hero {i+1}: {e}")
+                continue
+
+        _emit_log(callbacks, f"[HERO] Retrieved {len(results)} hero images")
+        return results
+
+    except Exception as e:
+        _emit_log(callbacks, f"[HERO] Error fetching heroes: {e}")
+        return results
+
+
 def fetch_art_from_libretro(
     *,
     lr_base: str,
@@ -1639,7 +1778,9 @@ def run_job(
     steamgriddb_square_only: Optional[bool] = None,
     search_term: Optional[str] = None,
     letter_filter: Optional[str] = None,
-    interactive_mode: bool = False
+    interactive_mode: bool = False,
+    download_heroes: bool = False,
+    hero_count: int = 1
 ) -> Tuple[bool, str]:
 
     config_path = Path(config_path)
@@ -2252,6 +2393,43 @@ def run_job(
                 _emit_log(callbacks, f"[OK] {platform_key}: {title} ({source_tag}) -> {out_path.parent.name}/")
             else:
                 _emit_log(callbacks, f"[OK] {platform_key}: {title} -> {out_path.parent.name}/")
+
+            # Download hero images if enabled
+            if download_heroes and api_key:
+                try:
+                    hero_cfg = cfg.get("hero_images", {}) or {}
+                    hero_dimensions = hero_cfg.get("prefer_dimensions", ["1920x620", "3840x1240"])
+                    hero_styles = hero_cfg.get("styles", ["alternate", "blurred", "material"])
+
+                    heroes = fetch_heroes_from_steamgriddb(
+                        api_key=api_key,
+                        base_url=base_url,
+                        timeout_s=timeout_s,
+                        delay_s=delay_s,
+                        cache_dir=cache_dir,
+                        allow_animated=allow_animated,
+                        prefer_dimensions=hero_dimensions,
+                        styles=hero_styles,
+                        platform_key=platform_key,
+                        title=title,
+                        platform_hints=hints,
+                        max_heroes=hero_count,
+                        callbacks=callbacks
+                    )
+
+                    for hero_bytes, hero_filename in heroes:
+                        hero_path = out_path.parent / f"{hero_filename}.{export_format.lower()}"
+                        try:
+                            hero_img = Image.open(BytesIO(hero_bytes))
+                            hero_img = ImageOps.exif_transpose(hero_img).convert("RGBA")
+                            hero_img.save(hero_path, export_format, optimize=True)
+                            _emit_log(callbacks, f"[HERO] Saved {hero_filename} for {title}")
+                        except Exception as he:
+                            _emit_log(callbacks, f"[HERO] Failed to save {hero_filename}: {he}")
+
+                except Exception as hero_err:
+                    _emit_log(callbacks, f"[HERO] Error downloading heroes for {title}: {hero_err}")
+
             return True
         except Exception as e:
             _emit_log(callbacks, f"[ERROR] {platform_key}: {title} - Compose error: {e}")
